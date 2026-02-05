@@ -1,0 +1,9 @@
+{
+  "version": "1.0.0",
+  "bgAsset": "freeplay/freeplayBGdadSonic",
+  "selectorAsset": "freeplay/freeplaySelector/freeplaySelector_sonic",
+  "numbersAsset": "digital_numbers_sonic",
+  "capsuleAsset": "freeplay/freeplayCapsule/capsule/freeplayCapsule_sonic_shorter",
+  "capsuleTextColors": ["#f786b5", "#f21671"],
+  "startDelay": 1.15
+}

@@ -1,0 +1,240 @@
+import funkin.modding.module.Module;
+import flixel.FlxG;
+import funkin.Paths;
+import funkin.ui.freeplay.FreeplayState;
+import funkin.util.ReflectUtil;
+import funkin.ui.freeplay.SongMenuItem;
+import funkin.audio.FunkinSound;
+import flixel.util.FlxTimer;
+import funkin.PlayerSettings;
+import funkin.util.TouchUtil;
+import funkin.util.SwipeUtil;
+import funkin.ui.freeplay.CapsuleNumber;
+import funkin.data.story.level.LevelRegistry;
+import funkin.util.SortUtil;
+import haxe.ds.ObjectMap;
+import funkin.data.freeplay.style.FreeplayStyleRegistry;
+import haxe.ds.StringMap;
+import haxe.Json;
+
+// Capsule Text
+import funkin.graphics.FlxFilteredSprite;
+import flixel.text.FlxText;
+import openfl.filters.GlowFilter;
+
+using StringTools;
+using Lambda;
+
+/**
+ * Adds the ability to customize the freeplay capsule for your mod
+ */
+class CustomFreeplayModule extends Module {
+	public function new(){
+		super('CustomFreeplayModule');
+	}
+
+	var changedCapsules:Map<SongMenuItem, String> = new ObjectMap();
+	public var customCapsules:Map<String, Dynamic> = new StringMap();
+
+	override function onSubStateOpenBegin(event) {
+        super.onSubStateOpenBegin(event);
+		if (!(event.targetState is FreeplayState)) return;
+
+		var json = Json.parse(Assets.getText(Paths.json('ui/freeplay/specialCapsuleData')));
+
+		if (json?.freeplayData != null) {
+			for (data in json.freeplayData) customCapsules.set(data.weekId, data);
+		}
+
+		if ((changedCapsules?.length ?? 1) > 0) changedCapsules.clear();
+	}
+
+	/**
+	 * Add data for the module to load for your capsule
+	 * @param levelIds The ids of the levels you want custom capsules for
+	 * @param data Custom data for your capsule 
+	 * 	var data = {
+			weekType: 'week', // Week type from base game to use ('week', 'weekend', 'custom')
+			weekNumber: {
+				number: 8, // The week number to use (Only goes from 1-9)
+				offsets: [0, 0] // Offsets to the number
+			},
+			onConfirm: () -> { // Custom function to run when pressing ENTER on a capsule (Don't add if you want to use default behaviour)
+			}
+		}
+	 */
+	public function addCustomFreeplayAssets(levelIds:Array<String>, data:Dynamic) {
+		for (item in levelIds) {
+			customCapsules.set(item, data);
+		}
+	}
+
+	public function setCapsuleText(capsule:SongMenuItem, fpCapData:Dynamic) {
+		if (!changedCapsules.exists(capsule)) return;
+
+		var data = changedCapsules.get(capsule)[1];
+
+		if (data == null) return;
+
+		var weekTextBase:FlxText = new FlxText(0, 0, 0, "");
+		weekTextBase.setFormat(Paths.font("Youre-Gone.otf"), 20, 0xFF21242E);
+		var levelId:String = fpCapData?.weekName;
+		var levelIdClean:String = "";
+		for (i in 0...levelId.length) {
+			  if (i == 0) {
+				levelIdClean += levelId.charAt(i);
+				continue;
+			  }
+	
+			  var previousChar:String = levelId.charAt(i - 1);
+			  var currentChar:String = levelId.charAt(i);
+	
+			  if (previousChar.toLowerCase() == previousChar && currentChar.toLowerCase() != currentChar) levelIdClean += " ";
+			  if (Std.parseInt(previousChar) == null && Std.parseInt(currentChar) != null) levelIdClean += " ";
+			  if (Std.parseInt(previousChar) != null && Std.parseInt(currentChar) == null) levelIdClean += " ";
+	
+			  levelIdClean += currentChar;
+		}		
+		weekTextBase.text = levelIdClean;
+		weekTextBase.draw();
+	
+		data.loadGraphic(weekTextBase.pixels);
+		data.setGraphicSize(Std.int(data.width * 0.9));
+		data.centerOffsets();
+		if (fpCapData?.offsets != null) {
+			data.offset.x -= (fpCapData?.offsets[0] ?? 0);
+			data.offset.y -= (fpCapData?.offsets[1] ?? 0);	
+		}
+
+	}
+
+	public function onCapsuleSelected(event:CapsuleScriptEvent):Void {
+		super.onCapsuleSelected(event);
+		if (event.capsule == null) return;
+
+		if (customCapsules.exists(event.capsule?.freeplayData?.levelId)) {
+			var data = customCapsules.get(event.capsule?.freeplayData?.levelId);
+			if (data.songSpecific != null) {
+				var songData = data.songSpecific.get(event.capsule?.freeplayData?.data?.id);
+				if (songData?.freeplayIcon != null) 
+					if (!event.capsule?.pixelIcon.graphic.key.contains(songData.freeplayIcon)) event.capsule?.pixelIcon.setCharacter(songData.freeplayIcon);	
+				if (songData?.songName != null) {
+					event.capsule?.songText.text = songData.songName;
+					event.capsule?.checkClip();
+				}	
+			}
+		}
+	}
+
+	public function onDifficultySwitch(event:CapsuleScriptEvent):Void {
+		super.onDifficultySwitch(event);
+		for (capsule in changedCapsules.copy().keys()) {
+			var originalData = changedCapsules.get(capsule);
+
+			var capToRemove = originalData[0];
+			
+			var data = customCapsules.get(capToRemove);
+
+			changedCapsules.remove(capsule);
+
+			if (data.customWeekLabel != null) {
+				capsule.members.remove(originalData[1]);
+			}
+			if (data.style != null) {
+				var styleData = FreeplayStyleRegistry.instance.fetchEntry(data.style);
+				if (capsule.capsule.graphic.key.contains(styleData.getCapsuleAssetKey())) resetStyleData(capsule);
+			} 
+		}
+		var filteredCapsules:Array<SongMenuItem> = FlxG.state.subState.grpCapsules.members.filter(function(cap:SongMenuItem) {
+			// Dead capsules are ones which were removed from the list when changing filters.
+			var levels = [];
+			for (item in customCapsules.keys()) levels.push(item);
+			return cap != null && cap.alive && cap.freeplayData != null && levels.contains(cap.freeplayData.levelId);
+		});
+		for (capsule in filteredCapsules){
+			if (capsule == null || !capsule.alive) continue;
+
+			customDisplay(capsule);
+		}
+	}
+
+	var weekTextFilter:GlowFilter = new GlowFilter(0xFF1A1C24, 1, 5, 5, 3.13, 1, true, true);
+
+	function customDisplay(cap:SongMenuItem) {
+		if (cap?.freeplayData == null) return;
+
+		var data = customCapsules.get(cap.freeplayData.levelId);
+
+		if (data.style != null) {
+			var styleData = FreeplayStyleRegistry.instance.fetchEntry(data.style);
+			cap.capsule.frames = Paths.getSparrowAtlas(styleData.getCapsuleAssetKey());
+			cap.capsule.animation.addByPrefix('selected', 'mp3 capsule w backing0', 24);
+			cap.capsule.animation.addByPrefix('unselected', 'mp3 capsule w backing NOT SELECTED', 24);
+			cap.songText.applyStyle(styleData);	  
+		}
+
+		if ((data.customWeekLabel?.assetType ?? 'sparrow') == 'text') {
+			var weekText:FlxFilteredSprite;
+			var weekTextBase:FlxText = new FlxText(0, 0, 0, "");
+
+			weekText = new FlxFilteredSprite(291, 87.75);
+			weekText.visible = true;
+			weekText.active = false;
+
+			weekTextBase.setFormat(Paths.font("Youre-Gone.otf"), 20, 0xFF21242E);
+			var levelId:String = (data.customWeekLabel?.weekName ?? cap.freeplayData.levelId);
+			var levelIdClean:String = "";
+			for (i in 0...levelId.length) {
+			  	if (i == 0) {
+					levelIdClean += levelId.charAt(i);
+					continue;
+			  	}
+		
+			  	var previousChar:String = levelId.charAt(i - 1);
+			  	var currentChar:String = levelId.charAt(i);
+		
+			  	if (previousChar.toLowerCase() == previousChar && currentChar.toLowerCase() != currentChar) levelIdClean += " ";
+			  	if (Std.parseInt(previousChar) == null && Std.parseInt(currentChar) != null) levelIdClean += " ";
+			  	if (Std.parseInt(previousChar) != null && Std.parseInt(currentChar) == null) levelIdClean += " ";
+		
+			  	levelIdClean += currentChar;
+			}		
+			weekTextBase.text = levelIdClean;
+			weekTextBase.draw();
+		
+			weekText.loadGraphic(weekTextBase.pixels);
+			weekText.filters = [weekTextFilter];
+			weekText.setGraphicSize(Std.int(weekText.width * 0.9));
+		
+			changedCapsules.set(cap, [cap.freeplayData.levelId, weekText]);
+
+			weekText.centerOffsets();
+			if (data.customWeekLabel?.offsets != null) {
+				weekText.offset.x -= (data.customWeekLabel?.offsets[0] ?? 0);
+				weekText.offset.y -= (data.customWeekLabel?.offsets[1] ?? 0);	
+			}
+
+			cap.add(weekText);
+		}
+	}
+
+	// NOTE: YOU SHOULD NOT EDIT ANYTHING BELOW HERE AS IT COULD CAUSE ISSUES WITH RESETTING THE CAPSULES
+	function resetWeekLabel(cap:SongMenuItem) {
+		if (cap?.freeplayData == null) return;
+		cap.weekType.frames = Paths.getSparrowAtlas('freeplay/freeplayCapsule/weektypes');
+		cap.weekType.animation.addByPrefix('WEEK', 'WEEK text instance 1', 24, false);
+    	cap.weekType.animation.addByPrefix('WEEKEND', 'WEEKEND text instance 1', 24, false);
+		cap.weekType.centerOffsets();
+		cap.checkWeek(cap.freeplayData.data.id);
+	}
+
+	function resetStyleData(cap:SongMenuItem) {
+		if (cap?.freeplayData == null) return;
+		
+		var styleData = FreeplayStyleRegistry.instance.fetchEntry(FlxG.state.subState.currentCharacter.getFreeplayStyleID());
+		cap.capsule.frames = Paths.getSparrowAtlas(styleData.getCapsuleAssetKey());
+		cap.capsule.animation.addByPrefix('selected', 'mp3 capsule w backing0', 24);
+		cap.capsule.animation.addByPrefix('unselected', 'mp3 capsule w backing NOT SELECTED', 24);
+		cap.songText.applyStyle(styleData);	  
+	}
+}

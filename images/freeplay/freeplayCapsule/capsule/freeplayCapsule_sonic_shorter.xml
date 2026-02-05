@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<TextureAtlas imagePath="freeplayCapsule_sonic.png">
+	<!-- Created using the Spritesheet and XML generator -->
+	<!-- https://uncertainprod.github.io/FNF-Spritesheet-XML-generator-Web -->
+	<SubTexture name="mp3 capsule w backing NOT SELECTED0000" x="0" y="233" width="611" height="233" frameX="-50" frameY="80" frameWidth="607" frameHeight="132"/>
+	<SubTexture name="mp3 capsule w backing0000" x="0" y="0" width="611" height="233" frameX="-55" frameY="80" frameWidth="607" frameHeight="132"/>
+</TextureAtlas>
