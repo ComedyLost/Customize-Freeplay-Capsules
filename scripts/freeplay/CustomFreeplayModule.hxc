@@ -1,21 +1,15 @@
 import funkin.modding.module.Module;
 import flixel.FlxG;
-import funkin.Paths;
 import funkin.ui.freeplay.FreeplayState;
-import funkin.util.ReflectUtil;
 import funkin.ui.freeplay.SongMenuItem;
-import funkin.audio.FunkinSound;
 import flixel.util.FlxTimer;
-import funkin.PlayerSettings;
-import funkin.util.TouchUtil;
-import funkin.util.SwipeUtil;
-import funkin.ui.freeplay.CapsuleNumber;
 import funkin.data.story.level.LevelRegistry;
 import funkin.util.SortUtil;
 import haxe.ds.ObjectMap;
 import funkin.data.freeplay.style.FreeplayStyleRegistry;
 import haxe.ds.StringMap;
 import haxe.Json;
+import funkin.graphics.FunkinSprite;
 
 // Capsule Text
 import funkin.graphics.FlxFilteredSprite;
@@ -49,19 +43,19 @@ class CustomFreeplayModule extends Module {
 		if ((changedCapsules?.length ?? 1) > 0) changedCapsules.clear();
 	}
 
+	override function onSubStateOpenEnd(event) {
+        super.onSubStateOpenEnd(event);
+		if (!(event.targetState is FreeplayState)) return;
+		var sprite = new FunkinSprite();
+		sprite.visible = false;
+		sprite.kill();
+		FlxG.state.subState.grpCapsules.members[0].add(sprite);
+	}
+
 	/**
 	 * Add data for the module to load for your capsule
 	 * @param levelIds The ids of the levels you want custom capsules for
 	 * @param data Custom data for your capsule 
-	 * 	var data = {
-			weekType: 'week', // Week type from base game to use ('week', 'weekend', 'custom')
-			weekNumber: {
-				number: 8, // The week number to use (Only goes from 1-9)
-				offsets: [0, 0] // Offsets to the number
-			},
-			onConfirm: () -> { // Custom function to run when pressing ENTER on a capsule (Don't add if you want to use default behaviour)
-			}
-		}
 	 */
 	public function addCustomFreeplayAssets(levelIds:Array<String>, data:Dynamic) {
 		for (item in levelIds) {
