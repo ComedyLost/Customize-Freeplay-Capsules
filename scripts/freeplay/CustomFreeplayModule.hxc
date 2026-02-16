@@ -24,7 +24,7 @@ using Lambda;
  */
 class CustomFreeplayModule extends Module {
 	public function new(){
-		super('CustomFreeplayModule');
+		super('CustomFreeplayModule', 100000000);
 	}
 
 	var changedCapsules:Map<SongMenuItem, String> = new ObjectMap();
@@ -170,6 +170,8 @@ class CustomFreeplayModule extends Module {
 		if ((data.customWeekLabel?.assetType ?? 'sparrow') == 'text') {
 			var weekText:FlxFilteredSprite;
 			var weekTextBase:FlxText = new FlxText(0, 0, 0, "");
+
+			cap.weekType.visible = false;
 
 			weekText = new FlxFilteredSprite(291, 87.75);
 			weekText.visible = true;

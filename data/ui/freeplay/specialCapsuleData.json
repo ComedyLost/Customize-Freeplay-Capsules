@@ -1,6 +1,14 @@
 {
     "freeplayData": [
         {
+            "weekId": "tutorial",
+            "weekType": "custom",
+            "customWeekLabel": {
+                "assetType": "text",
+                "weekName": "TUTORIAL"
+            }
+        },
+        {
             "weekId": "sserafim",
             "weekType": "custom",
             "customWeekLabel": {
