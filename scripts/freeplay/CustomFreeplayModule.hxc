@@ -11,6 +11,8 @@ import haxe.ds.StringMap;
 import haxe.Json;
 import funkin.graphics.FunkinSprite;
 
+import Array;
+
 // Capsule Text
 import funkin.graphics.FlxFilteredSprite;
 import flixel.text.FlxText;
@@ -135,8 +137,17 @@ class CustomFreeplayModule extends Module {
 				capsule.members.remove(originalData[1]);
 			}
 			if (data.style != null) {
-				var styleData = FreeplayStyleRegistry.instance.fetchEntry(data.style);
-				if (capsule.capsule.graphic.key.contains(styleData.getCapsuleAssetKey())) resetStyleData(capsule);
+				switch (Std.isOfType(data.style, Array)) {
+					case true:
+						for (val in data.style) {
+							if (val.variation != FlxG.state.subState.currentVariation) continue;
+							var styleData = FreeplayStyleRegistry.instance.fetchEntry(val.style);
+							if (capsule.capsule.graphic.key.contains(styleData.getCapsuleAssetKey())) resetStyleData(capsule);
+						}
+					case false:
+						var styleData = FreeplayStyleRegistry.instance.fetchEntry(data.style);
+						if (capsule.capsule.graphic.key.contains(styleData.getCapsuleAssetKey())) resetStyleData(capsule);
+				}	
 			} 
 		}
 		var filteredCapsules:Array<SongMenuItem> = FlxG.state.subState.grpCapsules.members.filter(function(cap:SongMenuItem) {
@@ -159,71 +170,90 @@ class CustomFreeplayModule extends Module {
 
 		var data = customCapsules.get(cap.freeplayData.levelId);
 
+		if (data == null) return; // How did you manage this???
+
 		if (data.style != null) {
-			var styleData = FreeplayStyleRegistry.instance.fetchEntry(data.style);
-			cap.capsule.frames = Paths.getSparrowAtlas(styleData.getCapsuleAssetKey());
-			cap.capsule.animation.addByPrefix('selected', 'mp3 capsule w backing0', 24);
-			cap.capsule.animation.addByPrefix('unselected', 'mp3 capsule w backing NOT SELECTED', 24);
-			cap.songText.applyStyle(styleData);	  
+			switch (Std.isOfType(data.style, Array)) {
+				case true:
+					for (val in data.style) {
+						if (val.variation != FlxG.state.subState.currentVariation) continue;
+						var styleData = FreeplayStyleRegistry.instance.fetchEntry(val.style);
+						cap.capsule.frames = Paths.getSparrowAtlas(styleData.getCapsuleAssetKey());
+						cap.capsule.animation.addByPrefix('selected', 'mp3 capsule w backing0', 24);
+						cap.capsule.animation.addByPrefix('unselected', 'mp3 capsule w backing NOT SELECTED', 24);
+						cap.songText.applyStyle(styleData);	  			
+					}
+				case false:
+					var styleData = FreeplayStyleRegistry.instance.fetchEntry(data.style);
+					cap.capsule.frames = Paths.getSparrowAtlas(styleData.getCapsuleAssetKey());
+					cap.capsule.animation.addByPrefix('selected', 'mp3 capsule w backing0', 24);
+					cap.capsule.animation.addByPrefix('unselected', 'mp3 capsule w backing NOT SELECTED', 24);
+					cap.songText.applyStyle(styleData);	  		
+			}
 		}
 
-		if ((data.customWeekLabel?.assetType ?? 'sparrow') == 'text') {
-			var weekText:FlxFilteredSprite;
-			var weekTextBase:FlxText = new FlxText(0, 0, 0, "");
-
-			cap.weekType.visible = false;
-
-			weekText = new FlxFilteredSprite(291, 87.75);
-			weekText.visible = true;
-			weekText.active = false;
-
-			weekTextBase.setFormat(Paths.font("Youre-Gone.otf"), 20, 0xFF21242E);
-			var levelId:String = (data.customWeekLabel?.weekName ?? cap.freeplayData.levelId);
-			var levelIdClean:String = "";
-			for (i in 0...levelId.length) {
-			  	if (i == 0) {
-					levelIdClean += levelId.charAt(i);
-					continue;
-			  	}
+		switch (data.weekType?.toLowerCase() ?? '') {
+			case 'base': // Use one of the base game types
+				// Reapply weekType image in case some evil ass mod overrides it and forgets to reset it
+				cap.weekType.frames = Paths.getSparrowAtlas('freeplay/freeplayCapsule/weektypes');
+				cap.weekType.animation.addByPrefix('WEEK', 'WEEK text instance 1', 24, false);
+				cap.weekType.animation.addByPrefix('WEEKEND', 'WEEKEND text instance 1', 24, false);
+				cap.weekType.centerOffsets();
+				cap.weekType.visible = true;
+				cap.weekType.animation.play((data.customWeekLabel?.type?.toUpperCase() ?? 'WEEK'), true);
+				if (data.customWeekLabel?.number != null) {
+					cap.weekNumbers[0].visible = true;
+					cap.weekNumbers[0].digit = Std.int(Math.abs(data.customWeekLabel?.number));
+					if ((data.customWeekLabel?.type?.toUpperCase() ?? 'WEEK') == 'WEEKEND') cap.weekNumbers[0].offset.x -= 35;			
+				}
+			case 'custom': // Make your own text
+				var weekText:FlxFilteredSprite;
+				var weekTextBase:FlxText = new FlxText(0, 0, 0, "");
 		
-			  	var previousChar:String = levelId.charAt(i - 1);
-			  	var currentChar:String = levelId.charAt(i);
-		
-			  	if (previousChar.toLowerCase() == previousChar && currentChar.toLowerCase() != currentChar) levelIdClean += " ";
-			  	if (Std.parseInt(previousChar) == null && Std.parseInt(currentChar) != null) levelIdClean += " ";
-			  	if (Std.parseInt(previousChar) != null && Std.parseInt(currentChar) == null) levelIdClean += " ";
-		
-			  	levelIdClean += currentChar;
-			}		
-			weekTextBase.text = levelIdClean;
-			weekTextBase.draw();
-		
-			weekText.loadGraphic(weekTextBase.pixels);
-			weekText.filters = [weekTextFilter];
-			weekText.setGraphicSize(Std.int(weekText.width * 0.9));
-		
-			changedCapsules.set(cap, [cap.freeplayData.levelId, weekText]);
-
-			weekText.centerOffsets();
-			if (data.customWeekLabel?.offsets != null) {
-				weekText.offset.x -= (data.customWeekLabel?.offsets[0] ?? 0);
-				weekText.offset.y -= (data.customWeekLabel?.offsets[1] ?? 0);	
-			}
-
-			cap.add(weekText);
+				cap.weekType.visible = false;
+	
+				weekText = new FlxFilteredSprite(291, 87.75);
+				weekText.visible = true;
+				weekText.active = false;
+	
+				weekTextBase.setFormat(Paths.font("Youre-Gone.otf"), 20, 0xFF21242E);
+				var levelId:String = (data.customWeekLabel?.weekName ?? cap.freeplayData.levelId); // Fill in a name based on the levelId
+				var levelIdClean:String = "";
+				for (i in 0...levelId.length) {
+					  if (i == 0) {
+						levelIdClean += levelId.charAt(i);
+						continue;
+					  }
+			
+					  var previousChar:String = levelId.charAt(i - 1);
+					  var currentChar:String = levelId.charAt(i);
+			
+					  if (previousChar.toLowerCase() == previousChar && currentChar.toLowerCase() != currentChar) levelIdClean += " ";
+					  if (Std.parseInt(previousChar) == null && Std.parseInt(currentChar) != null) levelIdClean += " ";
+					  if (Std.parseInt(previousChar) != null && Std.parseInt(currentChar) == null) levelIdClean += " ";
+			
+					  levelIdClean += currentChar;
+				}		
+				weekTextBase.text = levelIdClean;
+				weekTextBase.draw();
+			
+				weekText.loadGraphic(weekTextBase.pixels);
+				weekText.filters = [weekTextFilter];
+				weekText.setGraphicSize(Std.int(weekText.width * 0.9));
+			
+				changedCapsules.set(cap, [cap.freeplayData.levelId, weekText]);
+	
+				weekText.centerOffsets();
+				if (data.customWeekLabel?.offsets != null) {
+					weekText.offset.x -= (data.customWeekLabel?.offsets[0] ?? 0);
+					weekText.offset.y -= (data.customWeekLabel?.offsets[1] ?? 0);	
+				}
+	
+				cap.add(weekText);		
 		}
 	}
 
 	// NOTE: YOU SHOULD NOT EDIT ANYTHING BELOW HERE AS IT COULD CAUSE ISSUES WITH RESETTING THE CAPSULES
-	function resetWeekLabel(cap:SongMenuItem) {
-		if (cap?.freeplayData == null) return;
-		cap.weekType.frames = Paths.getSparrowAtlas('freeplay/freeplayCapsule/weektypes');
-		cap.weekType.animation.addByPrefix('WEEK', 'WEEK text instance 1', 24, false);
-    	cap.weekType.animation.addByPrefix('WEEKEND', 'WEEKEND text instance 1', 24, false);
-		cap.weekType.centerOffsets();
-		cap.checkWeek(cap.freeplayData.data.id);
-	}
-
 	function resetStyleData(cap:SongMenuItem) {
 		if (cap?.freeplayData == null) return;
 		
