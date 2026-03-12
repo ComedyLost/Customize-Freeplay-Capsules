@@ -11,13 +11,6 @@ import haxe.ds.StringMap;
 import haxe.Json;
 import funkin.graphics.FunkinSprite;
 
-import Array;
-
-// Capsule Text
-import funkin.graphics.FlxFilteredSprite;
-import flixel.text.FlxText;
-import openfl.filters.GlowFilter;
-
 using StringTools;
 using Lambda;
 
@@ -45,15 +38,6 @@ class CustomFreeplayModule extends Module {
 		if ((changedCapsules?.length ?? 1) > 0) changedCapsules.clear();
 	}
 
-	override function onSubStateOpenEnd(event) {
-        super.onSubStateOpenEnd(event);
-		if (!(event.targetState is FreeplayState)) return;
-		var sprite = new FunkinSprite();
-		sprite.visible = false;
-		sprite.kill();
-		FlxG.state.subState.grpCapsules.members[0].add(sprite);
-	}
-
 	/**
 	 * Add data for the module to load for your capsule
 	 * @param levelIds The ids of the levels you want custom capsules for
@@ -63,45 +47,6 @@ class CustomFreeplayModule extends Module {
 		for (item in levelIds) {
 			customCapsules.set(item, data);
 		}
-	}
-
-	public function setCapsuleText(capsule:SongMenuItem, fpCapData:Dynamic) {
-		if (!changedCapsules.exists(capsule)) return;
-
-		var data = changedCapsules.get(capsule)[1];
-
-		if (data == null) return;
-
-		var weekTextBase:FlxText = new FlxText(0, 0, 0, "");
-		weekTextBase.setFormat(Paths.font("Youre-Gone.otf"), 20, 0xFF21242E);
-		var levelId:String = fpCapData?.weekName;
-		var levelIdClean:String = "";
-		for (i in 0...levelId.length) {
-			  if (i == 0) {
-				levelIdClean += levelId.charAt(i);
-				continue;
-			  }
-	
-			  var previousChar:String = levelId.charAt(i - 1);
-			  var currentChar:String = levelId.charAt(i);
-	
-			  if (previousChar.toLowerCase() == previousChar && currentChar.toLowerCase() != currentChar) levelIdClean += " ";
-			  if (Std.parseInt(previousChar) == null && Std.parseInt(currentChar) != null) levelIdClean += " ";
-			  if (Std.parseInt(previousChar) != null && Std.parseInt(currentChar) == null) levelIdClean += " ";
-	
-			  levelIdClean += currentChar;
-		}		
-		weekTextBase.text = levelIdClean;
-		weekTextBase.draw();
-	
-		data.loadGraphic(weekTextBase.pixels);
-		data.setGraphicSize(Std.int(data.width * 0.9));
-		data.centerOffsets();
-		if (fpCapData?.offsets != null) {
-			data.offset.x -= (fpCapData?.offsets[0] ?? 0);
-			data.offset.y -= (fpCapData?.offsets[1] ?? 0);	
-		}
-
 	}
 
 	public function onCapsuleSelected(event:CapsuleScriptEvent):Void {
@@ -133,14 +78,12 @@ class CustomFreeplayModule extends Module {
 
 			changedCapsules.remove(capsule);
 
-			if (data.customWeekLabel != null) {
-				capsule.members.remove(originalData[1]);
-			}
+			if (data.customWeekLabel?.offsets != null) cap.weekText.centerOffsets();
 			if (data.style != null) {
 				switch (Std.isOfType(data.style, Array)) {
 					case true:
 						for (val in data.style) {
-							if (val.variation != FlxG.state.subState.currentVariation) continue;
+							if (val.character != FlxG.state.subState.currentCharacterId) continue;
 							var styleData = FreeplayStyleRegistry.instance.fetchEntry(val.style);
 							if (capsule.capsule.graphic.key.contains(styleData.getCapsuleAssetKey())) resetStyleData(capsule);
 						}
@@ -151,10 +94,7 @@ class CustomFreeplayModule extends Module {
 			} 
 		}
 		var filteredCapsules:Array<SongMenuItem> = FlxG.state.subState.grpCapsules.members.filter(function(cap:SongMenuItem) {
-			// Dead capsules are ones which were removed from the list when changing filters.
-			var levels = [];
-			for (item in customCapsules.keys()) levels.push(item);
-			return cap != null && cap.alive && cap.freeplayData != null && levels.contains(cap.freeplayData.levelId);
+			return cap != null && cap.alive && cap.freeplayData != null && customCapsules.exists(cap.freeplayData.levelId);
 		});
 		for (capsule in filteredCapsules){
 			if (capsule == null || !capsule.alive) continue;
@@ -163,8 +103,6 @@ class CustomFreeplayModule extends Module {
 		}
 	}
 
-	var weekTextFilter:GlowFilter = new GlowFilter(0xFF1A1C24, 1, 5, 5, 3.13, 1, true, true);
-
 	function customDisplay(cap:SongMenuItem) {
 		if (cap?.freeplayData == null) return;
 
@@ -172,11 +110,20 @@ class CustomFreeplayModule extends Module {
 
 		if (data == null) return; // How did you manage this???
 
+		if (data.customWeekLabel != null) {
+			if (data.customWeekLabel.weekName != null) setFreeplayCapsuleLabel(cap, data.customWeekLabel.weekName);
+			cap.weekText.centerOffsets();
+			if (data.customWeekLabel?.offsets != null) {
+				cap.weekText.offset.x -= (data.customWeekLabel?.offsets[0] ?? 0);
+				cap.weekText.offset.y -= (data.customWeekLabel?.offsets[1] ?? 0);	
+			}
+		}
 		if (data.style != null) {
+			changedCapsules.set(cap, [cap.freeplayData.levelId]);
 			switch (Std.isOfType(data.style, Array)) {
 				case true:
 					for (val in data.style) {
-						if (val.variation != FlxG.state.subState.currentVariation) continue;
+						if (val.character != FlxG.state.subState.currentCharacterId) continue;
 						var styleData = FreeplayStyleRegistry.instance.fetchEntry(val.style);
 						cap.capsule.frames = Paths.getSparrowAtlas(styleData.getCapsuleAssetKey());
 						cap.capsule.animation.addByPrefix('selected', 'mp3 capsule w backing0', 24);
@@ -191,66 +138,27 @@ class CustomFreeplayModule extends Module {
 					cap.songText.applyStyle(styleData);	  		
 			}
 		}
+	}
 
-		switch (data.weekType?.toLowerCase() ?? '') {
-			case 'base': // Use one of the base game types
-				// Reapply weekType image in case some evil ass mod overrides it and forgets to reset it
-				cap.weekType.frames = Paths.getSparrowAtlas('freeplay/freeplayCapsule/weektypes');
-				cap.weekType.animation.addByPrefix('WEEK', 'WEEK text instance 1', 24, false);
-				cap.weekType.animation.addByPrefix('WEEKEND', 'WEEKEND text instance 1', 24, false);
-				cap.weekType.centerOffsets();
-				cap.weekType.visible = true;
-				cap.weekType.animation.play((data.customWeekLabel?.type?.toUpperCase() ?? 'WEEK'), true);
-				if (data.customWeekLabel?.number != null) {
-					cap.weekNumbers[0].visible = true;
-					cap.weekNumbers[0].digit = Std.int(Math.abs(data.customWeekLabel?.number));
-					if ((data.customWeekLabel?.type?.toUpperCase() ?? 'WEEK') == 'WEEKEND') cap.weekNumbers[0].offset.x -= 35;			
-				}
-			case 'custom': // Make your own text
-				var weekText:FlxFilteredSprite;
-				var weekTextBase:FlxText = new FlxText(0, 0, 0, "");
-		
-				cap.weekType.visible = false;
-	
-				weekText = new FlxFilteredSprite(291, 87.75);
-				weekText.visible = true;
-				weekText.active = false;
-	
-				weekTextBase.setFormat(Paths.font("Youre-Gone.otf"), 20, 0xFF21242E);
-				var levelId:String = (data.customWeekLabel?.weekName ?? cap.freeplayData.levelId); // Fill in a name based on the levelId
-				var levelIdClean:String = "";
-				for (i in 0...levelId.length) {
-					  if (i == 0) {
-						levelIdClean += levelId.charAt(i);
-						continue;
-					  }
-			
-					  var previousChar:String = levelId.charAt(i - 1);
-					  var currentChar:String = levelId.charAt(i);
-			
-					  if (previousChar.toLowerCase() == previousChar && currentChar.toLowerCase() != currentChar) levelIdClean += " ";
-					  if (Std.parseInt(previousChar) == null && Std.parseInt(currentChar) != null) levelIdClean += " ";
-					  if (Std.parseInt(previousChar) != null && Std.parseInt(currentChar) == null) levelIdClean += " ";
-			
-					  levelIdClean += currentChar;
-				}		
-				weekTextBase.text = levelIdClean;
-				weekTextBase.draw();
-			
-				weekText.loadGraphic(weekTextBase.pixels);
-				weekText.filters = [weekTextFilter];
-				weekText.setGraphicSize(Std.int(weekText.width * 0.9));
-			
-				changedCapsules.set(cap, [cap.freeplayData.levelId, weekText]);
-	
-				weekText.centerOffsets();
-				if (data.customWeekLabel?.offsets != null) {
-					weekText.offset.x -= (data.customWeekLabel?.offsets[0] ?? 0);
-					weekText.offset.y -= (data.customWeekLabel?.offsets[1] ?? 0);	
-				}
-	
-				cap.add(weekText);		
-		}
+	function setFreeplayCapsuleLabel(cap:SongMenuItem, levelId:String) {
+		if (cap == null) return;
+		var levelIdClean:String = "";
+		for (i in 0...levelId.length) {
+			if (i == 0) {
+				levelIdClean += levelId.charAt(i);
+				continue;
+			}
+			var previousChar:String = levelId.charAt(i - 1);
+			var currentChar:String = levelId.charAt(i);
+	  
+			if (previousChar.toLowerCase() == previousChar && currentChar.toLowerCase() != currentChar) levelIdClean += " ";
+			if (Std.parseInt(previousChar) == null && Std.parseInt(currentChar) != null) levelIdClean += " ";
+			if (Std.parseInt(previousChar) != null && Std.parseInt(currentChar) == null) levelIdClean += " ";
+	  
+			levelIdClean += currentChar;	  	  
+		}	
+		cap.createWeekTextGraphic(levelIdClean);
+		cap.weekText.loadGraphic(FlxG.bitmap.get(levelIdClean));	
 	}
 
 	// NOTE: YOU SHOULD NOT EDIT ANYTHING BELOW HERE AS IT COULD CAUSE ISSUES WITH RESETTING THE CAPSULES
