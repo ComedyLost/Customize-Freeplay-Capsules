@@ -1,15 +1,7 @@
 {
     "freeplayData": [
         {
-            "weekId": "tutorial",
-            "weekType": "custom",
-            "customWeekLabel": {
-                "weekName": "TUTORIAL"
-            }
-        },
-        {
             "weekId": "sserafim",
-            "weekType": "custom",
             "customWeekLabel": {
                 "weekName": "SP. COLLAB 1",
                 "offsets": [-10, 0]
